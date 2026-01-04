@@ -1,118 +1,270 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>EdgeOS Bootloader</title>
+<title>EdgeOS Installer</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <style>
-body {
+html, body {
   margin: 0;
+  padding: 0;
+  height: 100%;
   background: #0b1020;
   color: white;
   font-family: system-ui, sans-serif;
 }
-#boot {
+
+/* Screens */
+.screen {
+  display: none;
   height: 100vh;
-  display: flex;
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
 }
-input, button {
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: none;
+.screen.active {
+  display: flex;
 }
+
+h1 { margin: 0; }
+
 button {
-  background: #3b82f6;
+  padding: 10px 18px;
+  border-radius: 10px;
+  border: none;
+  background: #2563eb;
   color: white;
   cursor: pointer;
+  font-size: 14px;
 }
-#installer {
-  margin-top: 10px;
+button.secondary {
+  background: rgba(255,255,255,.15);
+}
+button:disabled {
+  opacity: .5;
+  cursor: default;
+}
+
+input[type="file"] {
+  color: white;
+}
+
+/* Progress */
+.progress {
+  width: 280px;
+  height: 10px;
+  background: rgba(255,255,255,.15);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.bar {
+  height: 100%;
+  width: 0%;
+  background: #22c55e;
+  transition: width .3s;
+}
+
+/* Debug */
+#debug {
+  width: 360px;
+  background: rgba(0,0,0,.35);
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 12px;
+  display: none;
+}
+#debug pre {
+  margin: 0;
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+#app {
+  height: 100%;
+}
+.small {
+  opacity: .8;
+  font-size: 13px;
+  max-width: 520px;
+  text-align: center;
 }
 </style>
 
-<!-- JSZip MUST be here -->
+<!-- JSZip (required) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 
 <body>
 
-<div id="boot">
-  <h1>EdgeOS</h1>
-  <p id="status">No EdgeOS installed</p>
+<!-- WELCOME -->
+<div class="screen active" id="welcome">
+  <h1>Welcome to EdgeOS</h1>
+  <p class="small">This installer will install or update EdgeOS from a ZIP package.</p>
+  <button onclick="go('select')">Install / Update</button>
+</div>
 
-  <!-- INSTALLER (always visible if no OS) -->
-  <div id="installer">
-    <input type="file" id="edgeUpdate" accept=".zip">
-    <button onclick="installEdgeOS()">Install EdgeOS</button>
+<!-- SELECT ZIP -->
+<div class="screen" id="select">
+  <h1>Select EdgeOS Package</h1>
+  <p class="small">
+    Choose a ZIP that contains <b>app.html</b>, <b>app.js</b> and <b>style.css</b>
+    (foldered ZIPs are also supported).
+  </p>
+  <input type="file" id="edgeUpdate" accept=".zip">
+  <div style="display:flex; gap:10px;">
+    <button onclick="beginInstall()">Continue</button>
+    <button class="secondary" onclick="go('welcome')">Back</button>
   </div>
 </div>
 
+<!-- INSTALL -->
+<div class="screen" id="install">
+  <h1>Installing EdgeOS</h1>
+  <div class="progress"><div class="bar" id="bar"></div></div>
+  <p id="status">Waiting…</p>
+
+  <!-- DEBUG PANEL -->
+  <div id="debug">
+    <strong>ZIP contents</strong>
+    <pre id="debugList"></pre>
+  </div>
+
+  <button class="secondary" onclick="go('select')" style="margin-top:8px;">Cancel</button>
+</div>
+
+<!-- BOOT -->
+<div class="screen" id="boot">
+  <h1>EdgeOS</h1>
+  <p>Booting system…</p>
+</div>
+
+<!-- OS -->
 <div id="app"></div>
 
 <script>
-const html = localStorage.getItem("edgeos_app_html");
-const js   = localStorage.getItem("edgeos_app_js");
-const css  = localStorage.getItem("edgeos_app_css");
-
-if (html && js && css) {
-  // BOOT INSTALLED OS
-  document.getElementById("boot").remove();
-
-  const style = document.createElement("style");
-  style.textContent = css;
-  document.head.appendChild(style);
-
-  document.getElementById("app").innerHTML = html;
-
-  const script = document.createElement("script");
-  script.textContent = js;
-  document.body.appendChild(script);
+/* ===== SCREEN NAV ===== */
+function go(id) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  const el = document.getElementById(id);
+  if (el) el.classList.add("active");
 }
 
-/* INSTALLER */
-async function installEdgeOS() {
+/* ===== AUTO-BOOT IF INSTALLED ===== */
+const installed =
+  localStorage.getItem("edgeos_app_html") &&
+  localStorage.getItem("edgeos_app_js") &&
+  localStorage.getItem("edgeos_app_css");
+
+if (installed) {
+  bootOS();
+}
+
+/* ===== INSTALL ENTRY ===== */
+function beginInstall() {
+  go("install");
+  startInstall();
+}
+
+/* ===== INSTALL PROCESS (FLATTEN + DEBUG) ===== */
+async function startInstall() {
   const file = document.getElementById("edgeUpdate").files[0];
   const status = document.getElementById("status");
+  const bar = document.getElementById("bar");
+  const debug = document.getElementById("debug");
+  const debugList = document.getElementById("debugList");
 
   if (!file) {
-    status.textContent = "Please select edgeos-update.zip";
+    alert("Please select an EdgeOS update ZIP.");
+    go("select");
     return;
   }
 
-  status.textContent = "Installing EdgeOS…";
+  try {
+    status.textContent = "Reading package…";
+    bar.style.width = "15%";
 
-  const zip = await JSZip.loadAsync(file);
+    const zip = await JSZip.loadAsync(file);
 
-  const required = ["app.html", "app.js", "style.css"];
-  for (let f of required) {
-    if (!zip.file(f)) {
-      status.textContent = "Invalid EdgeOS update package";
+    // DEBUG LIST
+    const names = Object.keys(zip.files);
+    debug.style.display = "block";
+    debugList.textContent = names.join("\n");
+
+    // Helper: find file at root or inside folders
+    function findFile(filename) {
+      return names.find(n => n === filename || n.endsWith("/" + filename));
+    }
+
+    const htmlPath = findFile("app.html");
+    const jsPath   = findFile("app.js");
+    // support both style.css and styles.css
+    const cssPath  = findFile("style.css") || findFile("styles.css");
+
+    if (!htmlPath || !jsPath || !cssPath) {
+      bar.style.width = "0%";
+      status.textContent =
+        "Invalid package: required files not found. Need app.html, app.js, style.css";
       return;
     }
+
+    bar.style.width = "45%";
+    status.textContent = "Extracting system files…";
+
+    // Install (flatten)
+    localStorage.setItem("edgeos_app_html", await zip.file(htmlPath).async("string"));
+    localStorage.setItem("edgeos_app_js",   await zip.file(jsPath).async("string"));
+    localStorage.setItem("edgeos_app_css",  await zip.file(cssPath).async("string"));
+
+    // Keep version if your package doesn't include manifest yet
+    localStorage.setItem("edgeos_version", "0.0.1");
+
+    bar.style.width = "100%";
+    status.textContent =
+      (htmlPath.includes("/") || jsPath.includes("/") || cssPath.includes("/"))
+        ? "Installed successfully (foldered ZIP auto-fixed). Booting…"
+        : "Installation complete. Booting…";
+
+    setTimeout(bootOS, 900);
+
+  } catch (e) {
+    console.error(e);
+    bar.style.width = "0%";
+    status.textContent = "Installation failed (ZIP read error).";
   }
+}
 
-  localStorage.setItem(
-    "edgeos_app_html",
-    await zip.file("app.html").async("string")
-  );
-  localStorage.setItem(
-    "edgeos_app_js",
-    await zip.file("app.js").async("string")
-  );
-  localStorage.setItem(
-    "edgeos_app_css",
-    await zip.file("style.css").async("string")
-  );
-  localStorage.setItem("edgeos_version", "0.0.1");
+/* ===== BOOT OS ===== */
+function bootOS() {
+  go("boot");
 
-  status.textContent = "Installation complete. Rebooting…";
-  setTimeout(() => location.reload(), 1000);
+  setTimeout(() => {
+    // remove installer screens
+    document.querySelectorAll(".screen").forEach(s => s.remove());
+
+    const css = localStorage.getItem("edgeos_app_css");
+    const html = localStorage.getItem("edgeos_app_html");
+    const js = localStorage.getItem("edgeos_app_js");
+
+    // basic sanity
+    if (!css || !html || !js) {
+      // if something went wrong, show installer again
+      location.reload();
+      return;
+    }
+
+    const style = document.createElement("style");
+    style.textContent = css;
+    document.head.appendChild(style);
+
+    document.getElementById("app").innerHTML = html;
+
+    const script = document.createElement("script");
+    script.textContent = js;
+    document.body.appendChild(script);
+  }, 1200);
 }
 </script>
 
