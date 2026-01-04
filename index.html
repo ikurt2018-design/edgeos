@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>EdgeOS</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>
+body {
+  margin: 0;
+  background: #0b1020;
+  color: white;
+  font-family: system-ui, sans-serif;
+}
+#boot {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+}
+</style>
+</head>
+
+<body>
+
+<div id="boot">
+  <h1>EdgeOS</h1>
+  <p id="status">Booting EdgeOS…</p>
+</div>
+
+<div id="app"></div>
+
+<script>
+const html = localStorage.getItem("edgeos_app_html");
+const js   = localStorage.getItem("edgeos_app_js");
+const css  = localStorage.getItem("edgeos_app_css");
+
+if (!html || !js || !css) {
+  document.getElementById("status").textContent =
+    "No EdgeOS installed. Please install edgeos-update.zip";
+} else {
+  document.getElementById("boot").remove();
+
+  const style = document.createElement("style");
+  style.textContent = css;
+  document.head.appendChild(style);
+
+  document.getElementById("app").innerHTML = html;
+
+  const script = document.createElement("script");
+  script.textContent = js;
+  document.body.appendChild(script);
+}
+</script>
+
+</body>
+</html>
