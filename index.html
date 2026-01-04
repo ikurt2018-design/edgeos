@@ -1,271 +1,266 @@
 <!DOCTYPE html>
-<html lang="uk">
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>EdgeOS Installer</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>EdgeOS Bootloader</title>
 
 <style>
-html, body {
-  margin: 0;
-  padding: 0;
-  height: 100%;
-  background: #0b1020;
-  color: white;
-  font-family: system-ui, sans-serif;
+:root{
+  --bg:#0b1020;
+  --panel:rgba(25,30,50,.95);
+  --panel2:rgba(255,255,255,.08);
+  --text:#fff;
+  --accent:#2563eb;
+  --good:#22c55e;
+  --bad:#ef4444;
 }
-
-/* Screens */
-.screen {
-  display: none;
-  height: 100vh;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  gap: 14px;
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;}
+#wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:18px;}
+.card{
+  width:min(720px, 94vw);
+  background:var(--panel);
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:16px;
+  padding:18px;
+  box-shadow: 0 10px 40px rgba(0,0,0,.35);
 }
-.screen.active {
-  display: flex;
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+h1{margin:0 0 6px 0;font-size:26px;}
+small{opacity:.8;}
+hr{border:none;border-top:1px solid rgba(255,255,255,.12);margin:14px 0;}
+button{
+  background:var(--accent); color:#fff; border:none; border-radius:10px;
+  padding:10px 14px; cursor:pointer; font-size:14px;
 }
-
-h1 { margin: 0; }
-
-button {
-  padding: 10px 18px;
-  border-radius: 10px;
-  border: none;
-  background: #2563eb;
-  color: white;
-  cursor: pointer;
-  font-size: 14px;
-}
-button.secondary {
-  background: rgba(255,255,255,.15);
-}
-button:disabled {
-  opacity: .5;
-  cursor: default;
-}
-
-input[type="file"] {
-  color: white;
-}
-
-/* Progress */
-.progress {
-  width: 280px;
-  height: 10px;
-  background: rgba(255,255,255,.15);
-  border-radius: 999px;
-  overflow: hidden;
-}
-.bar {
-  height: 100%;
-  width: 0%;
-  background: #22c55e;
-  transition: width .3s;
-}
-
-/* Debug */
-#debug {
-  width: 360px;
-  background: rgba(0,0,0,.35);
-  border-radius: 10px;
-  padding: 10px;
-  font-size: 12px;
-  display: none;
-}
-#debug pre {
-  margin: 0;
-  max-height: 180px;
-  overflow: auto;
-  white-space: pre-wrap;
-}
-
-#app {
-  height: 100%;
-}
-.small {
-  opacity: .8;
-  font-size: 13px;
-  max-width: 520px;
-  text-align: center;
-}
+button.secondary{background:rgba(255,255,255,.14);}
+button.danger{background:var(--bad);}
+button:disabled{opacity:.55;cursor:default;}
+input[type="file"]{color:#fff;}
+#status{opacity:.9;white-space:pre-wrap;line-height:1.35;}
+.progress{height:10px;border-radius:999px;background:rgba(255,255,255,.15);overflow:hidden;flex:1;min-width:200px;}
+.bar{height:100%;width:0%;background:var(--good);transition:width .25s;}
+#debug{display:none;background:rgba(0,0,0,.28);border-radius:12px;padding:10px;margin-top:10px;}
+#debug pre{margin:0;max-height:220px;overflow:auto;font-size:12px;white-space:pre-wrap;}
+#app{min-height:100vh;}
+.tag{display:inline-block;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.12);font-size:12px;opacity:.9;}
 </style>
 
-<!-- JSZip (required) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
-
 <body>
 
-<!-- WELCOME -->
-<div class="screen active" id="welcome">
-  <h1>Welcome to EdgeOS</h1>
-  <p class="small">This installer will install or update EdgeOS from a ZIP package.</p>
-  <button onclick="go('select')">Install / Update</button>
-</div>
-
-<!-- SELECT ZIP -->
-<div class="screen" id="select">
-  <h1>Select EdgeOS Package</h1>
-  <p class="small">
-    Choose a ZIP that contains <b>app.html</b>, <b>app.js</b> and <b>style.css</b>
-    (foldered ZIPs are also supported).
-  </p>
-  <input type="file" id="edgeUpdate" accept=".zip">
-  <div style="display:flex; gap:10px;">
-    <button onclick="beginInstall()">Continue</button>
-    <button class="secondary" onclick="go('welcome')">Back</button>
-  </div>
-</div>
-
-<!-- INSTALL -->
-<div class="screen" id="install">
-  <h1>Installing EdgeOS</h1>
-  <div class="progress"><div class="bar" id="bar"></div></div>
-  <p id="status">Waiting…</p>
-
-  <!-- DEBUG PANEL -->
-  <div id="debug">
-    <strong>ZIP contents</strong>
-    <pre id="debugList"></pre>
-  </div>
-
-  <button class="secondary" onclick="go('select')" style="margin-top:8px;">Cancel</button>
-</div>
-
-<!-- BOOT -->
-<div class="screen" id="boot">
-  <h1>EdgeOS</h1>
-  <p>Booting system…</p>
-</div>
-
-<!-- OS -->
 <div id="app"></div>
 
+<div id="wrap">
+  <div class="card" id="bootCard">
+    <div class="row" style="justify-content:space-between;">
+      <div>
+        <h1>EdgeOS</h1>
+        <small id="sub">Bootloader / Installer</small>
+      </div>
+      <div class="tag" id="verTag">No system installed</div>
+    </div>
+
+    <p id="status">Checking installation…</p>
+
+    <div class="row" style="margin-top:8px;">
+      <div class="progress"><div class="bar" id="bar"></div></div>
+      <button class="secondary" id="forceBtn" onclick="showInstaller()">Force Installer</button>
+    </div>
+
+    <hr>
+
+    <!-- INSTALLER -->
+    <div id="installer">
+      <div class="row">
+        <input type="file" id="zipInput" accept=".zip" />
+        <button onclick="installFromZip()">Install / Update</button>
+        <button class="secondary" onclick="bootIfInstalled()">Boot</button>
+        <button class="danger" onclick="powerwashInstaller()">Powerwash</button>
+      </div>
+      <small class="small" style="display:block;margin-top:8px;opacity:.8;">
+        ZIP must contain app.html, app.js, style.css (foldered ZIPs are supported).
+      </small>
+
+      <div id="debug">
+        <strong>ZIP contents</strong>
+        <pre id="debugList"></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
-/* ===== SCREEN NAV ===== */
-function go(id) {
-  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
-  const el = document.getElementById(id);
-  if (el) el.classList.add("active");
+/* =========================
+   STORAGE KEYS
+========================= */
+const K_HTML = "edgeos_app_html";
+const K_JS   = "edgeos_app_js";
+const K_CSS  = "edgeos_app_css";
+const K_VER  = "edgeos_version";
+
+/* =========================
+   UI REFS
+========================= */
+const statusEl = document.getElementById("status");
+const barEl = document.getElementById("bar");
+const verTag = document.getElementById("verTag");
+const debugBox = document.getElementById("debug");
+const debugList = document.getElementById("debugList");
+
+/* =========================
+   HELPERS
+========================= */
+function setBar(p){ barEl.style.width = Math.max(0, Math.min(100, p)) + "%"; }
+
+function hasInstalledOS(){
+  return !!(localStorage.getItem(K_HTML) && localStorage.getItem(K_JS) && localStorage.getItem(K_CSS));
 }
 
-/* ===== AUTO-BOOT IF INSTALLED ===== */
-const installed =
-  localStorage.getItem("edgeos_app_html") &&
-  localStorage.getItem("edgeos_app_js") &&
-  localStorage.getItem("edgeos_app_css");
-
-if (installed) {
-  bootOS();
+function showInstaller(){
+  // installer is always present; just update message
+  const v = localStorage.getItem(K_VER);
+  verTag.textContent = v ? ("Installed: " + v) : "No system installed";
+  statusEl.textContent = v
+    ? "Installer ready. You can update EdgeOS with a ZIP package."
+    : "No EdgeOS installation found. Please install from ZIP.";
+  setBar(0);
 }
 
-/* ===== INSTALL ENTRY ===== */
-function beginInstall() {
-  go("install");
-  startInstall();
-}
-
-/* ===== INSTALL PROCESS (FLATTEN + DEBUG) ===== */
-async function startInstall() {
-  const file = document.getElementById("edgeUpdate").files[0];
-  const status = document.getElementById("status");
-  const bar = document.getElementById("bar");
-  const debug = document.getElementById("debug");
-  const debugList = document.getElementById("debugList");
-
-  if (!file) {
-    alert("Please select an EdgeOS update ZIP.");
-    go("select");
+/* =========================
+   BOOT
+========================= */
+function bootIfInstalled(){
+  if(!hasInstalledOS()){
+    showInstaller();
     return;
   }
 
-  try {
-    status.textContent = "Reading package…";
-    bar.style.width = "15%";
+  const v = localStorage.getItem(K_VER) || "unknown";
+  verTag.textContent = "Installed: " + v;
+  statusEl.textContent = "Booting EdgeOS…";
+  setBar(100);
+
+  // remove boot UI then mount OS
+  document.getElementById("wrap").remove();
+
+  const css = localStorage.getItem(K_CSS);
+  const html = localStorage.getItem(K_HTML);
+  const js = localStorage.getItem(K_JS);
+
+  const style = document.createElement("style");
+  style.textContent = css;
+  document.head.appendChild(style);
+
+  document.getElementById("app").innerHTML = html;
+
+  const script = document.createElement("script");
+  script.textContent = js;
+  document.body.appendChild(script);
+}
+
+/* =========================
+   INSTALL (ZIP) with FLATTEN + DEBUG
+========================= */
+async function installFromZip(){
+  const file = document.getElementById("zipInput").files[0];
+  debugBox.style.display = "none";
+  debugList.textContent = "";
+
+  if(!file){
+    statusEl.textContent = "Please choose an EdgeOS update ZIP first.";
+    return;
+  }
+
+  try{
+    statusEl.textContent = "Reading ZIP package…";
+    setBar(10);
 
     const zip = await JSZip.loadAsync(file);
-
-    // DEBUG LIST
     const names = Object.keys(zip.files);
-    debug.style.display = "block";
+
+    // DEBUG list
+    debugBox.style.display = "block";
     debugList.textContent = names.join("\n");
 
-    // Helper: find file at root or inside folders
-    function findFile(filename) {
-      return names.find(n => n === filename || n.endsWith("/" + filename));
-    }
+    // find file at root or nested
+    const findFile = (filename) => names.find(n => n === filename || n.endsWith("/" + filename));
 
     const htmlPath = findFile("app.html");
     const jsPath   = findFile("app.js");
-    // support both style.css and styles.css
     const cssPath  = findFile("style.css") || findFile("styles.css");
 
-    if (!htmlPath || !jsPath || !cssPath) {
-      bar.style.width = "0%";
-      status.textContent =
-        "Invalid package: required files not found. Need app.html, app.js, style.css";
+    if(!htmlPath || !jsPath || !cssPath){
+      setBar(0);
+      statusEl.textContent =
+        "Invalid package: required files not found.\n" +
+        "Need: app.html, app.js, style.css\n\n" +
+        "Tip: Your ZIP can be foldered, but must contain these files somewhere inside.";
       return;
     }
 
-    bar.style.width = "45%";
-    status.textContent = "Extracting system files…";
+    setBar(45);
+    statusEl.textContent = "Extracting and installing…";
 
-    // Install (flatten)
-    localStorage.setItem("edgeos_app_html", await zip.file(htmlPath).async("string"));
-    localStorage.setItem("edgeos_app_js",   await zip.file(jsPath).async("string"));
-    localStorage.setItem("edgeos_app_css",  await zip.file(cssPath).async("string"));
+    localStorage.setItem(K_HTML, await zip.file(htmlPath).async("string"));
+    localStorage.setItem(K_JS,   await zip.file(jsPath).async("string"));
+    localStorage.setItem(K_CSS,  await zip.file(cssPath).async("string"));
 
-    // Keep version if your package doesn't include manifest yet
-    localStorage.setItem("edgeos_version", "0.0.1");
+    // If you want version to come from zip later, add manifest.json in future.
+    localStorage.setItem(K_VER, "0.0.2");
 
-    bar.style.width = "100%";
-    status.textContent =
-      (htmlPath.includes("/") || jsPath.includes("/") || cssPath.includes("/"))
-        ? "Installed successfully (foldered ZIP auto-fixed). Booting…"
-        : "Installation complete. Booting…";
+    setBar(100);
+    const foldered = (htmlPath.includes("/") || jsPath.includes("/") || cssPath.includes("/"));
+    statusEl.textContent =
+      "Install complete. " + (foldered ? "(Foldered ZIP auto-fixed)\n" : "\n") +
+      "Rebooting to EdgeOS…";
 
-    setTimeout(bootOS, 900);
+    verTag.textContent = "Installed: " + (localStorage.getItem(K_VER) || "unknown");
 
-  } catch (e) {
+    setTimeout(bootIfInstalled, 900);
+  }catch(e){
     console.error(e);
-    bar.style.width = "0%";
-    status.textContent = "Installation failed (ZIP read error).";
+    setBar(0);
+    statusEl.textContent = "Install failed: ZIP could not be read.";
   }
 }
 
-/* ===== BOOT OS ===== */
-function bootOS() {
-  go("boot");
+/* =========================
+   POWERWASH (INSTALLER LEVEL)
+========================= */
+function powerwashInstaller(){
+  const ok = confirm("Powerwash will erase EdgeOS (apps, files, settings). Continue?");
+  if(!ok) return;
 
-  setTimeout(() => {
-    // remove installer screens
-    document.querySelectorAll(".screen").forEach(s => s.remove());
+  // Remove EdgeOS keys only
+  const keys = Object.keys(localStorage);
+  for(const k of keys){
+    if(k.startsWith("edgeos_")) localStorage.removeItem(k);
+  }
 
-    const css = localStorage.getItem("edgeos_app_css");
-    const html = localStorage.getItem("edgeos_app_html");
-    const js = localStorage.getItem("edgeos_app_js");
-
-    // basic sanity
-    if (!css || !html || !js) {
-      // if something went wrong, show installer again
-      location.reload();
-      return;
-    }
-
-    const style = document.createElement("style");
-    style.textContent = css;
-    document.head.appendChild(style);
-
-    document.getElementById("app").innerHTML = html;
-
-    const script = document.createElement("script");
-    script.textContent = js;
-    document.body.appendChild(script);
-  }, 1200);
+  debugBox.style.display = "none";
+  debugList.textContent = "";
+  verTag.textContent = "No system installed";
+  setBar(0);
+  statusEl.textContent = "Powerwash complete. Please install EdgeOS from ZIP.";
 }
+
+/* =========================
+   INITIAL STARTUP
+========================= */
+(function init(){
+  const v = localStorage.getItem(K_VER);
+  verTag.textContent = v ? ("Installed: " + v) : "No system installed";
+
+  if(hasInstalledOS()){
+    statusEl.textContent = "EdgeOS found. Click Boot, or install an update ZIP.";
+    setBar(0);
+  } else {
+    statusEl.textContent = "No EdgeOS installed. Please install from ZIP.";
+    setBar(0);
+  }
+})();
 </script>
 
 </body>
