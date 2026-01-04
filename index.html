@@ -1,8 +1,9 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>EdgeOS</title>
+<title>EdgeOS Bootloader</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <style>
@@ -18,15 +19,38 @@ body {
   align-items: center;
   justify-content: center;
   flex-direction: column;
+  gap: 10px;
+}
+input, button {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: none;
+}
+button {
+  background: #3b82f6;
+  color: white;
+  cursor: pointer;
+}
+#installer {
+  margin-top: 10px;
 }
 </style>
+
+<!-- JSZip MUST be here -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 
 <body>
 
 <div id="boot">
   <h1>EdgeOS</h1>
-  <p id="status">Booting EdgeOS…</p>
+  <p id="status">No EdgeOS installed</p>
+
+  <!-- INSTALLER (always visible if no OS) -->
+  <div id="installer">
+    <input type="file" id="edgeUpdate" accept=".zip">
+    <button onclick="installEdgeOS()">Install EdgeOS</button>
+  </div>
 </div>
 
 <div id="app"></div>
@@ -36,10 +60,8 @@ const html = localStorage.getItem("edgeos_app_html");
 const js   = localStorage.getItem("edgeos_app_js");
 const css  = localStorage.getItem("edgeos_app_css");
 
-if (!html || !js || !css) {
-  document.getElementById("status").textContent =
-    "No EdgeOS installed. Please install edgeos-update.zip";
-} else {
+if (html && js && css) {
+  // BOOT INSTALLED OS
   document.getElementById("boot").remove();
 
   const style = document.createElement("style");
@@ -51,6 +73,46 @@ if (!html || !js || !css) {
   const script = document.createElement("script");
   script.textContent = js;
   document.body.appendChild(script);
+}
+
+/* INSTALLER */
+async function installEdgeOS() {
+  const file = document.getElementById("edgeUpdate").files[0];
+  const status = document.getElementById("status");
+
+  if (!file) {
+    status.textContent = "Please select edgeos-update.zip";
+    return;
+  }
+
+  status.textContent = "Installing EdgeOS…";
+
+  const zip = await JSZip.loadAsync(file);
+
+  const required = ["app.html", "app.js", "style.css"];
+  for (let f of required) {
+    if (!zip.file(f)) {
+      status.textContent = "Invalid EdgeOS update package";
+      return;
+    }
+  }
+
+  localStorage.setItem(
+    "edgeos_app_html",
+    await zip.file("app.html").async("string")
+  );
+  localStorage.setItem(
+    "edgeos_app_js",
+    await zip.file("app.js").async("string")
+  );
+  localStorage.setItem(
+    "edgeos_app_css",
+    await zip.file("style.css").async("string")
+  );
+  localStorage.setItem("edgeos_version", "0.0.1");
+
+  status.textContent = "Installation complete. Rebooting…";
+  setTimeout(() => location.reload(), 1000);
 }
 </script>
 
